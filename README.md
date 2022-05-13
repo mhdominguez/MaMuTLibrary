@@ -6,8 +6,8 @@ These Perl scripts are used tofilter, color, annotate, filter, subset, merge, an
 # Script listing
 
 ## MaMuT break divisions
- Break all divisions in a MaMuT dataset, not preserving even the closest daughter links
- usage: perl MaMuT_dataset_break_divisions.pl mamut_dataset.xml
+ Break all divisions in a MaMuT dataset, not preserving even the closest daughter links\
+ usage: perl MaMuT_dataset_break_divisions.pl mamut_dataset.xml\
  
 ## MaMuT color spots
 Colors spots and links in a MaMuT dataset, according to instruction provided...
