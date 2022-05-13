@@ -14,7 +14,7 @@ These Perl scripts are used to filter, color, annotate, filter, subset, merge, a
 usages: `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml col=-3197141` #(fixed Java color all spots/links)<br>
                 `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml col=255,255,128` #(fixed Java color all spots/links)<br>
                 `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml rnd` #(random color by track)<br>
-                `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml vec_xz=4` #(color track directionality converting angles to hue in single plane xy yz xz, by moving window size in timeframes)<br>`
+                `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml vec_xz=4` #(color track directionality converting angles to hue in single plane xy yz xz, by moving window size in timeframes)<br>
                 `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml tis` #(color by tissueID i.e. populated by SVF)<br>
                 `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml div` #(color division nodes)<br>
                 `perl MaMuT_dataset_color_spots.pl mamut_dataset.xml den=4` #(color by density, by number of radii units around each cell to count other cells)<br>
