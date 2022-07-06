@@ -5,7 +5,13 @@
 # Gladstone Institutes
 
 # Summarizes all tracks exported from MaMuT_dataset_print_track_coordinates_in_time.pl, printing a table of features such as begin/end XYZT, peak displacement, average density, etc
-# usage: perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv
+# usages: 
+#  perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv
+#  perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv start=0 stop=120 velocity_window=20 timepoints_per_hour=10
+#    where 30-120 are the timepoint boundaries for consideration, 20 is the velocity moving average window (motility period), 10 timepoints per hour are captured
+#  perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv density_radius=5
+#    where 5 times cell's radius is used for density calculations 
+
 
 use Cwd qw( cwd );
 my $path = Cwd::cwd();
@@ -18,9 +24,8 @@ use constant {
 	FEATURE_TRACK_START => 1,
 	FEATURE_TRACK_STOP => 2,
 	FEATURE_TRACK_DISPLACEMENT => 3,
-	FEATURE_CELL_DISTANCE => 4,
 
-	FEATURE_TRACK_MAX => 5,
+	FEATURE_TRACK_MAX => 4,
 };
 
 my $density_radius = 12;
@@ -47,19 +52,24 @@ sub main {
 			$track_feature[FEATURE_TRACK_START] = $this_param[1]; 
 		} elsif ( $this_param[0] =~ /stop/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
 			$track_feature[FEATURE_TRACK_STOP] = $this_param[1]; 
-		} elsif ( $this_param[0] =~ /track_displacement/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
+		} elsif ( $this_param[0] =~ /track_displacement_max/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
 			$track_feature[FEATURE_TRACK_DISPLACEMENT] = $this_param[1]; 
-		} elsif ( $this_param[0] =~ /cell_dist/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
-			$track_feature[FEATURE_CELL_DISTANCE] = $this_param[1]; 			
-		} elsif ( $this_param[0] =~ /track_duration/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
+		} elsif ( $this_param[0] =~ /track_duration_min/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
 			$track_feature[FEATURE_TRACK_DURATION] = $this_param[1]; 
 		} elsif ( $this_param[0] =~ /den/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
 			$density_radius = $this_param[1]; 
 		} elsif ( $this_param[0] =~ /vel/i && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
 			$velocity_window = $this_param[1]; 
+		} elsif ( ( $this_param[0] =~ /frames_per_hour/i || $this_param[0] =~ /points_per_hour/i ) && $this_param[1] =~ /^[+-]?\d*\.?\d*([eE][-+]?\d+)?$/ ) {
+			$timeframe_per_hour = $this_param[1]; 
 		}
 	}
 	undef @this_param;			
+	
+	unless (defined($dataset_file) && $dataset_file =~ /\w/ ) {
+		print "Track coordinate input file not provided!\n";
+		return;
+	}
 	
 	#read in coordinate data
 	unless ( open(FILE, "<$path/$dataset_file" ) ) {
@@ -96,22 +106,10 @@ sub main {
 							if ( $lines_infile[$i][$u-1] =~ /\{(.*?),(.*?),(.*?),(.*?),(.*?)\}/ ) {
 								my @xyz_end = ( $2, $3, $4, $5 );
 								$going = 1; #default is pass
-								#if ( $track_feature[FEATURE_TRACK_DURATION] > 1 ) {
-								#	if ( $track_feature[FEATURE_TRACK_DURATION] > $u - $t - 1 ) { #doesn't make the cut
-								#		$going = -1;
-								#		last;
-								#	} else {
-								#		#$going = 1;
-								#	}
-								#}
-								#if ( $track_feature[FEATURE_TRACK_DURATION] > 1 ) {
 									if ( $track_feature[FEATURE_TRACK_DISPLACEMENT] > sqrt((($xyz_end[0]-$xyz_begin[0])**2) + (($xyz_end[1]-$xyz_begin[1])**2) + (($xyz_end[2]-$xyz_begin[2])**2)) ) { #doesn't make the cut
 										$going = -1;
 										last;
-									} else {
-										#$going = 1;
 									}
-								#}
 								last;
 							}
 						}
@@ -147,7 +145,8 @@ sub main {
 		}
 	}
 	
-	print scalar(@lines_infile) . "\n"; #" $track_feature[FEATURE_TRACK_STOP]\n";
+	#print scalar(@lines_infile) . "\n"; #" $track_feature[FEATURE_TRACK_STOP]\n";
+	print "Summarizing $dataset_file, (".scalar(@lines_infile)." lines)" . "\n" . "  from " . $track_feature[FEATURE_TRACK_START] . " to " . $track_feature[FEATURE_TRACK_STOP] . " (" . $timeframe_per_hour . " timepoints per hour) " . "\n" . "  density radius: " . $density_radius . "x radii units, velocity moving average window: " . $velocity_window . " timeframes\n";
 	my @output_table;
 	my $split;
 	my @velocities;
@@ -300,10 +299,6 @@ sub main {
 		}
 		
 		#average velocities here
-		#print scalar(@velocities) . ": " . $xyzt_begin[4] . "->" . "$xyzt_end[4] \n";
-		#if (scalar(@velocities)==0) {
-		#	print "problem!$velocity_window\n";
-		#}
 		if ( $going > $xyzt_begin[4] + $track_feature[FEATURE_TRACK_DURATION] ) { #here, track must last at least track_duration
 			push( @output_table, [($i-1,@xyzt_begin[0..4],@xyzt_end[0..4],$peak_track_displacement,$timeframe_per_hour*(set_stats(@velocities))[0]/$velocity_window),(set_stats(@densities))[0]] );
 			#print "track $i, average vel: " . $output_table[$#output_table][13] . ", " .scalar(@densities)."\n";
