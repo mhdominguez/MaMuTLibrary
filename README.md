@@ -186,7 +186,5 @@ usage:<br>
 #### Summarizes all tracks exported from MaMuT_dataset_print_track_coordinates_in_time.pl, printing a table of features such as begin/end XYZT, peak displacement, average density, etc
 usages:<br>
          `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv`<br>
-         `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv start=0 stop=120 velocity_window=20 timepoints_per_hour=10`<br>
-	where 30-120 are the timepoint boundaries for consideration, 20 is the velocity moving average window (motility period), 10 timepoints per hour are captured<br>
-         `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv density_radius=5`<br>
-	where 5 times cell's radius is used for density calculations<br>
+         `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv start=0 stop=120 velocity_window=20 timepoints_per_hour=10` #(30-120 are the timepoints considered, 20 is the velocity moving average window (motility period), 10 timepoints per hour are captured)<br>
+         `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv density_radius=5` #(5 times cell's radius is used for density calculations)<br>
