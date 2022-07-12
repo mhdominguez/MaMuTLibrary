@@ -48,7 +48,8 @@ usage:<br>
 ####   each cell's XYZ coordinates are printed in the appropriate cell of the table for its lineage/track and timepoint<br>
 usage:<br>
                 `perl MaMuT_dataset_print_track_coordinates_in_time.pl dataset_mamut.xml dataset_background_mamut.xml`<br>
-#### note this script is single-threaded and slow!<br>
+                `perl MaMuT_dataset_print_track_coordinates_in_time.pl *.xml parallel=8` #(batch process 8-at-a-time, using 8 threads)<br>
+#### note this script is slow!<br>
   
 <br><br>
 ## MaMuT dataset TGMM division annotation xml generator
@@ -188,3 +189,4 @@ usages:<br>
          `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv`<br>
          `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv start=0 stop=120 velocity_window=20 timepoints_per_hour=10` #(30-120 are the timepoints considered, 20 is the velocity moving average window (motility period), 10 timepoints per hour are captured)<br>
          `perl MaMuT_track_coordinates_single_data_export.pl dataset_mamut.track_coordinates_in_time.tsv density_radius=5` #(5 times cell's radius is used for density calculations)<br>
+         `perl MaMuT_track_coordinates_single_data_export.pl *.tsv parallel=8` #(batch process 8-at-a-time, using 8 threads)<br>
