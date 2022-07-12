@@ -13,11 +13,17 @@
 #    where 5 times cell's radius is used for density calculations 
 
 
+BEGIN {
+	@ARGV = map glob, @ARGV;
+}
+
 use Cwd qw( cwd );
-my $path = Cwd::cwd();
 
 use constant TRUE => 1;
 use constant FALSE => 0;
+
+#multithreaded actions
+my $can_use_threads = eval 'use threads; 1';
 
 use constant {
 	FEATURE_TRACK_DURATION => 0,
@@ -35,9 +41,9 @@ my $timeframe_per_hour = 10;
 #==================
 #Main subroutine
 #==================
-sub main {
+sub main_single_data_export {
 	my $dataset_file = shift;
-	
+	my $path = shift;
 	my @params = @_;
 	#initialize instructions for this analysis
 	my @track_feature = (-1) x FEATURE_TRACK_MAX;
@@ -305,6 +311,11 @@ sub main {
 		}
 	}
 
+	unless( scalar(@output_table) > 1 && scalar(@{$output_table[0]}) > 13 ) {
+		print "Not enough track data for " . $dataset_file . "\n";
+		return;
+	}
+
 	if ( open(FILE, ">$path/$dataset_file\.single_track_data\.tsv" ) ) {
 		flock(FILE, LOCK_EX);
 		print FILE "Tracks\tBegin X\tBegin Y\tBegin Z\tBegin R\tBegin T\tEnd X\tEnd Y\tEnd Z\tBegin R\tEnd T\tPeak Displacement\tAvg Sliding Velocity (micron/hr)\tAvg Density (cells per $density_radius radii)\n";
@@ -375,6 +386,72 @@ sub set_stats {
 	return ( $avg, $med, $std );
 } 
 
-main(@ARGV);
+#==================
+# MAIN
+#==================
+#main_sub {
+	my @files;
+	for ( my $i=$#ARGV; $i>=0; $i-- ) {
+		if ( $ARGV[$i] !~ /\=/ && $ARGV[$i] !~ /\/$/ && -e $ARGV[$i] ) {
+			push( @files, splice( @ARGV, $i, 1 ) );
+		}
+	}
+
+	#handle batch processing
+	if ( scalar(@files) > 1 ) {
+		my $path = Cwd::cwd();
+		my $num_threads = 4; #default 4 threads
+		for ( my $i=$#ARGV; $i>=0; $i-- ) {
+			if ( $ARGV[$i] =~ /parallel==?(\d+)$/ ) { #proper command line for number of threads is *
+				$num_threads = $1;
+				splice( @ARGV, $i, 1 );
+			}
+		}
+		unless ( defined($num_threads) && $num_threads =~ /^\d+$/ && $can_use_threads && $num_threads > 1) {
+			$num_threads = 1;
+		}
+
+		my @tot_items = @files;
+
+		my $l__ = 0;
+		my @run_threads_ = (); #running threads
+		my @tot_threads_ = (); #total threads, at the end, scalar of this should equal $l__
+
+		while( $l__ < scalar(@tot_items) ) {
+			if ( scalar( @run_threads_ ) < $num_threads) {
+				$tot_threads_[$l__] = threads->create( {'context' => 'list'}, sub { return main_single_data_export( $tot_items[$l__], $path, @ARGV ) });
+				$l__++;
+				sleep 1; #give at least one second between requests
+			}
+			@run_threads_ = threads->list(threads::running());
+			foreach my $oldth__ (@tot_threads_) {
+				if ($oldth__->is_running()) {
+				} elsif ($oldth__->is_joinable()) {
+					$oldth__->join();
+				}
+			}
+			@run_threads_ = threads->list(threads::running());
+		}
+
+		#clean up finished threads
+		@run_threads_ = threads->list(threads::running());
+		while (scalar @run_threads_ > 0) {
+			foreach my $oldth__ (@tot_threads_) {
+				if ($oldth__->is_joinable()) {
+					$oldth__->join();
+				}
+			}
+			$l__ = scalar @run_threads_;
+			@run_threads_ = threads->list(threads::running());
+			redo if ( scalar @run_threads_ == 0 && $l__ > 0 );
+		}
+
+	} elsif ( scalar(@files) == 1 ) {
+		my $path = Cwd::cwd();
+		main_single_data_export($path . qq~/~ . $files[0], $path, @ARGV );
+	} else {
+		print "Improperly formatted command line, no matching track coordinates files found.\n";
+	}
+#}
 
 

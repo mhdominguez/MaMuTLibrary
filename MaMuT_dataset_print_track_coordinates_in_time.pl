@@ -8,15 +8,24 @@
 # it prints each [track] lineage in a row of the output table
 # columns of the output table represent each timepoint
 # each cell's XYZ coordinates are printed in the appropriate cell of the table for its lineage/track and timepoint
-# usage: perl MaMuT_dataset_print_track_coordinates_in_time.pl dataset_mamut.xml
+# usages:
+# perl MaMuT_dataset_print_track_coordinates_in_time.pl dataset_mamut.xml
+# perl MaMuT_dataset_print_track_coordinates_in_time.pl *.xml parallel=8 #processes 8 files at a time with .xml extension
 
 # note this script is single-threaded and slow!
 
+BEGIN {
+	@ARGV = map glob, @ARGV;
+}
+
 use Cwd qw( cwd );
-my $path = Cwd::cwd();
 
 use constant TRUE => 1;
 use constant FALSE => 0;
+
+#multithreaded actions
+my $can_use_threads = eval 'use threads; 1';
+
 
 
 #this script takes an input MaMuT .xml file, and reconstructs each [track] lineage, printing each in a new row of the output table; each column of the output table represents each timepoint, and the XYZ coordinates of the cell(s) belonging to that track at that timepoint
@@ -25,9 +34,8 @@ use constant FALSE => 0;
 #==================
 #Main subroutine
 #==================
-sub main {
-	#my (  @arguments ) = @_;
-	my $dataset_file = $_[0];
+sub main_print_track {
+	my ( $dataset_file, $path ) = @_;
 	my @lines_main; #unchanging lines during reconstruction
 	my $line_number_spots = -1; #indicates where to put <AllSpots> blocks when reconstructing the file at the end
 	my @lines_spots;
@@ -42,10 +50,10 @@ sub main {
 	my $line_number_filters = -1; #indicates where to put <AllTracks> blocks when reconstructing the file at the end
 	my @lines_filters;
 	my @track_in_filters;
-	
+
 	#parse dataset.mamut
-	if ( open(FILE, "<$path/$dataset_file" ) ) {
-		print "Writing track coordinates in time for $dataset_file to a new tab-delimited file.\n";
+	if ( $dataset_file !~ /\/$/ && -e $dataset_file && open(FILE, "<$dataset_file" ) ) {
+		print "Examining track coordinates in time for $dataset_file.\n";
 		flock(FILE, LOCK_EX);
 		while( <FILE> ) {
 			chomp;
@@ -132,7 +140,7 @@ sub main {
 		flock(FILE, LOCK_UN);
 		close(FILE);
 	} else {
-		print "Error opening $path/$dataset_file!\n";
+		print "Error opening $dataset_file!\n";
 		return;
 	}
 	#return;
@@ -215,12 +223,7 @@ sub main {
 					} else {
 						$xyz[3] = "N\/A";
 					}
-					
-					#if ( $current_lineage eq "" && $going < 1 ) {
-					#	print "l:" . $lineages[0] . ", t=" . $i . ", $this_spot_id\n";
-					#
-					#}
-					
+
 					next unless ( defined($xyz[0]) && defined($xyz[1]) && defined($xyz[2]) && $xyz[0] =~ /\d/ && $xyz[1] =~ /\d/ && $xyz[2] =~ /\d/ );
 					$xyzprint = "{" . $current_lineage . "," . join(',',@xyz) . "}";
 					if ( $output_table[$l][$frames_spots[$i]] eq "" ) { #empty so don't try to find the spot
@@ -228,27 +231,19 @@ sub main {
 					} else { 
 						$output_table[$l][$frames_spots[$i]] .= ";" . $xyzprint; #concatenate output
 					}
-					#for ( my $j=scalar(@{$spots_in_tracks[$l]})-1; $j>=0; $j-- ) {	
-					#	if ( $spots_in_tracks[$l][$j] eq $this_spot_id ) {
-					#		if ( $output_table[$l][$i] eq "" ) { #empty so don't try to find the spot
-					#			$output_table[$l][$i] = $xyzprint;
-					#		} else {
-					#			 my @split_output_table = split( ';', $output_table[$l][$i] );
-					#			 my $found = FALSE;
-					#			 map { $found = TRUE if ( $_ eq $xyzprint ); } @split_output_table;
-					#			
-					#			unless( $found) {
-					#				$output_table[$l][$i] .= ";" . $xyzprint; #concatenate output
-					#			}
-					#		}
-					#	}
-					#}
+
 				}
 			}
 		}
 	}
 
+	unless( scalar(@frames_spots) > 1 && scalar(@track_in_tracks) > 0 ) {
+		print "Insufficient track reconstruction for " . $dataset_file . "\n";
+		return;
+	}
+
 	if ( open(FILE, ">$path/$dataset_file\.track_coordinates_in_time\.tsv" ) ) {
+		print "Writing track coordinates in time for $dataset_file.\n";
 		flock(FILE, LOCK_EX);
 		print FILE "Track";
 		my $max_timepoints = max(@frames_spots);
@@ -301,6 +296,72 @@ sub min {
 }
 
 
-main(@ARGV);
 
+#==================
+# MAIN
+#==================
+#main_sub {
+	my @files;
+	for ( my $i=$#ARGV; $i>=0; $i-- ) {
+		if ( $ARGV[$i] !~ /\=/ && $ARGV[$i] !~ /\/$/ && -e $ARGV[$i] ) {
+			push( @files, splice( @ARGV, $i, 1 ) );
+		}
+	}
+
+	#handle batch processing
+	if ( scalar(@files) > 1 ) {
+		my $path = Cwd::cwd();
+		my $num_threads = 4; #default 4 threads
+		for ( my $i=$#ARGV; $i>=0; $i-- ) {
+			if ( $ARGV[$i] =~ /parallel==?(\d+)$/ ) { #proper command line for number of threads is *
+				$num_threads = $1;
+				splice( @ARGV, $i, 1 );
+			}
+		}
+		unless ( defined($num_threads) && $num_threads =~ /^\d+$/ && $can_use_threads && $num_threads > 1) {
+			$num_threads = 1;
+		}
+
+		my @tot_items = @files;
+
+		my $l__ = 0;
+		my @run_threads_ = (); #running threads
+		my @tot_threads_ = (); #total threads, at the end, scalar of this should equal $l__
+
+		while( $l__ < scalar(@tot_items) ) {
+			if ( scalar( @run_threads_ ) < $num_threads) {
+				$tot_threads_[$l__] = threads->create( {'context' => 'list'}, sub { return main_print_track( $tot_items[$l__], $path ) });
+				$l__++;
+				sleep 1; #give at least one second between requests
+			}
+			@run_threads_ = threads->list(threads::running());
+			foreach my $oldth__ (@tot_threads_) {
+				if ($oldth__->is_running()) {
+				} elsif ($oldth__->is_joinable()) {
+					$oldth__->join();
+				}
+			}
+			@run_threads_ = threads->list(threads::running());
+		}
+
+		#clean up finished threads
+		@run_threads_ = threads->list(threads::running());
+		while (scalar @run_threads_ > 0) {
+			foreach my $oldth__ (@tot_threads_) {
+				if ($oldth__->is_joinable()) {
+					$oldth__->join();
+				}
+			}
+			$l__ = scalar @run_threads_;
+			@run_threads_ = threads->list(threads::running());
+			redo if ( scalar @run_threads_ == 0 && $l__ > 0 );
+		}
+
+	} elsif ( scalar(@files) == 1 ) {
+		my $path = Cwd::cwd();
+		main_print_track($path . qq~/~ . $files[0], $path );
+	} else {
+		print "Improperly formatted command line, no matching dataset files found.\n";
+	}
+#}
 
