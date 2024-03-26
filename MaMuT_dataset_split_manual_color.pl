@@ -37,6 +37,7 @@ sub main {
 	my @track_in_filters;
 	
 	my $num_bins = 1;
+	my @bin_labels = ("null");
 	#$num_bins = $_[1] if ( defined($_[1]) && $_[1] =~ /\d/ );
 	my @bins_tracks;
 	#my $open_block = -1; #will determine actions to take while parsing XML line-by-line
@@ -68,6 +69,7 @@ sub main {
 								unless ( exists($colors_bins{$this_color}) ) {
 									$colors_bins{$this_color} = $num_bins;
 									$num_bins++;
+									push( @bin_labels, int(abs($this_color)) );
 								}
 							}
 							last if ( $_ =~ /(^|^\s+)<\/SpotsInFrame/ );
@@ -173,6 +175,7 @@ sub main {
 					$colors_bins{$this_color} = $num_bins;
 					$this_bin = $num_bins;
 					$num_bins++;
+					push( @bin_labels, int(abs($this_color)) );
 				}
 
 				unshift( @{$lines_spots_divided[0][$this_bin]}, $lines_spots[0][$k] );
@@ -289,7 +292,7 @@ sub main {
 			}
 		}
 		
-		if ( open(FILE, ">$path/$dataset_file\.$l\.xml" ) ) {
+		if ( open(FILE, ">$path/$dataset_file\.$bin_labels[$l]\.xml" ) ) {
 			flock(FILE, LOCK_EX);
 			for ( my $fl=0; $fl<scalar(@lines_main); $fl++ ) {
 				if ( $fl == $line_number_spots ) {
