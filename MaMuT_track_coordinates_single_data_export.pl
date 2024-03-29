@@ -489,7 +489,7 @@ sub set_stats {
 
 		if ( $header ne "" && scalar(@lines_outfile) > 0 && open(FILE, ">$out_summary" ) ) {
 			flock(FILE, LOCK_EX);
-			print FILE "Source\t" . $header;
+			print FILE "Source\t" . $header . "\n";
 			map { print FILE $_ . "\n"; } @lines_outfile;
 			flock(FILE, LOCK_UN);
 			close(FILE);
