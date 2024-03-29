@@ -18,6 +18,7 @@ BEGIN {
 }
 
 use Cwd qw( cwd );
+use File::Spec;
 
 use constant TRUE => 1;
 use constant FALSE => 0;
@@ -78,7 +79,7 @@ sub main_single_data_export {
 	}
 	
 	#read in coordinate data
-	unless ( open(FILE, "<$path/$dataset_file" ) ) {
+	unless ( open(FILE, "<" . File::Spec->catfile( $path, $dataset_file ) ) ) {
 		print( "Cannot open $symb_dir/$inlist: $!\n" );
 		return;
 	}
@@ -316,14 +317,16 @@ sub main_single_data_export {
 		return;
 	}
 
-	if ( open(FILE, ">$path/$dataset_file\.single_track_data\.tsv" ) ) {
+	if ( open(FILE, ">" . File::Spec->catfile( $path, $dataset_file ) . "\.single_track_data\.tsv" ) ) {
 		flock(FILE, LOCK_EX);
 		print FILE "Tracks\tBegin X\tBegin Y\tBegin Z\tBegin R\tBegin T\tEnd X\tEnd Y\tEnd Z\tBegin R\tEnd T\tPeak Displacement\tAvg Sliding Velocity (micron/hr)\tAvg Density (cells per $density_radius radii)\n";
 		map { print FILE join("\t",@{$_}) . "\n"; } @output_table;
 		flock(FILE, LOCK_UN);
 		close(FILE);
+
+		return "$dataset_file\.single_track_data\.tsv";
 	} else {
-		print "Error writing to $path/$dataset_file\.single_track_data\.tsv!\n";
+		print "Error writing to " . File::Spec->catfile( $path, $dataset_file ) . "\.single_track_data\.tsv!\n";
 		return;
 	}
 }
@@ -398,6 +401,9 @@ sub set_stats {
 	}
 
 	#handle batch processing
+	my $thread_output; #keeps filenames for concatenating data after all threads finished
+	my @files_concatenate = ();
+
 	if ( scalar(@files) > 1 ) {
 		my $path = Cwd::cwd();
 		my $num_threads = 4; #default 4 threads
@@ -427,7 +433,8 @@ sub set_stats {
 			foreach my $oldth__ (@tot_threads_) {
 				if ($oldth__->is_running()) {
 				} elsif ($oldth__->is_joinable()) {
-					$oldth__->join();
+					$thread_output = $oldth__->join();
+					push( @files_concatenate, $thread_output ) if ( defined($thread_output) && -e File::Spec->catfile( $path, $thread_output ) );
 				}
 			}
 			@run_threads_ = threads->list(threads::running());
@@ -438,7 +445,8 @@ sub set_stats {
 		while (scalar @run_threads_ > 0) {
 			foreach my $oldth__ (@tot_threads_) {
 				if ($oldth__->is_joinable()) {
-					$oldth__->join();
+					$thread_output = $oldth__->join();
+					push( @files_concatenate, $thread_output ) if ( defined($thread_output) && -e File::Spec->catfile( $path, $thread_output ) );
 				}
 			}
 			$l__ = scalar @run_threads_;
@@ -446,12 +454,58 @@ sub set_stats {
 			redo if ( scalar @run_threads_ == 0 && $l__ > 0 );
 		}
 
+		my $out_summary = File::Spec->catfile( $path, "track_data_summary_" . time() . ".tsv" );
+		my $header = "";
+		my @lines_outfile;
+		for ( my $i=0; $i<scalar(@files_concatenate); $i++ ) {
+
+			if ( open(FILE, "<" . File::Spec->catfile( $path, $files_concatenate[$i] ) ) ) {
+				flock( FILE, LOCK_EX );
+				$_ = <FILE>; #first line is header
+				chomp;
+				if ( $header eq "" ) {
+					$header = $_;
+				} elsif ( $header ne $_ ) {
+					print "Mismatch between header when concatenating " . File::Spec->catfile( $path, $files_concatenate[$i] ) . ", ignoring this file.\n";
+					flock( FILE, LOCK_UN );
+					close( FILE );
+					next;
+				}
+
+				$files_concatenate[$i] =~ s/\.single_track_data\.tsv$//;
+				$files_concatenate[$i] =~ s/\.track_coordinates_in_time\.tsv$//;
+				while( <FILE> ) {
+					chomp;
+					push( @lines_outfile, $files_concatenate[$i] . "\t" . $_ );
+				}
+				flock( FILE, LOCK_UN );
+				close( FILE );
+
+			} else {
+				print( "Cannot open " . File::Spec->catfile( $path, $files_concatenate[$i] ) . " $!\n" );
+				#return;
+			}
+		}
+
+		if ( $header ne "" && scalar(@lines_outfile) > 0 && open(FILE, ">$out_summary" ) ) {
+			flock(FILE, LOCK_EX);
+			print FILE "Source\t" . $header;
+			map { print FILE $_ . "\n"; } @lines_outfile;
+			flock(FILE, LOCK_UN);
+			close(FILE);
+		} else {
+			print "Error writing to $out_summary!\n";
+			#return;
+		}
+
 	} elsif ( scalar(@files) == 1 ) {
 		my $path = Cwd::cwd();
-		main_single_data_export($path . qq~/~ . $files[0], $path, @ARGV );
+		main_single_data_export( $files[0], $path, @ARGV ); #do not capture returned value since no summary
 	} else {
 		print "Improperly formatted command line, no matching track coordinates files found.\n";
 	}
 #}
+
+
 
 
