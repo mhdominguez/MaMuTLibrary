@@ -35,7 +35,7 @@ use constant {
 	FEATURE_TRACK_MAX => 4,
 };
 
-my $density_radius = 12;
+my $density_radius = 8;
 my $velocity_window = 5;
 my $timeframe_per_hour = 10;
 
@@ -457,6 +457,8 @@ sub set_stats {
 		my $out_summary = File::Spec->catfile( $path, "track_data_summary_" . time() . ".tsv" );
 		my $header = "";
 		my @lines_outfile;
+
+		@files_concatenate = @files_ = sort { $a cmp $b } @files_concatenate;
 		for ( my $i=0; $i<scalar(@files_concatenate); $i++ ) {
 
 			if ( open(FILE, "<" . File::Spec->catfile( $path, $files_concatenate[$i] ) ) ) {
